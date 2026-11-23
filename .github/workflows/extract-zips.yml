@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           python3 <<'PY'
-          from pathlib import Path
+          from pathlib import Path, PurePosixPath
           from zipfile import ZipFile
           import shutil
 
@@ -44,12 +44,26 @@ jobs:
               print(f"Extracting: {archive.relative_to(root)}")
 
               with ZipFile(archive, "r") as zf:
-                  for info in zf.infolist():
-                      # Ignore directory entries; files are created as needed.
-                      if info.is_dir():
-                          continue
+                  file_entries = [i for i in zf.infolist() if not i.is_dir()]
+                  if not file_entries:
+                      continue
 
-                      destination = (root / info.filename).resolve()
+                  # Detecta si todos los archivos están dentro de una misma carpeta raíz (ej. Render_Y/)
+                  top_dirs = {
+                      PurePosixPath(i.filename).parts[0]
+                      for i in file_entries
+                      if len(PurePosixPath(i.filename).parts) > 1
+                  }
+                  has_root_files = any(
+                      len(PurePosixPath(i.filename).parts) == 1
+                      for i in file_entries
+                  )
+                  strip_top = (len(top_dirs) == 1 and not has_root_files)
+
+                  for info in file_entries:
+                      parts = PurePosixPath(info.filename).parts
+                      rel_path = Path(*parts[1:]) if strip_top else Path(*parts)
+                      destination = (root / rel_path).resolve()
 
                       # Prevent ZIP path-traversal entries from writing outside the repository.
                       if destination != root and root not in destination.parents:
