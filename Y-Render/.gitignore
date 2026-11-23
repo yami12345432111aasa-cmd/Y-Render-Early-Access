@@ -1,7 +1,0 @@
-build/
-out/
-.cache/
-*.user
-*.suo
-.vscode/
-.idea/
