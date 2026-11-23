@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   extract-zips:
-    # Avoid running again on the workflow's own commit.
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
 
@@ -48,7 +47,6 @@ jobs:
                   if not file_entries:
                       continue
 
-                  # Detecta si todos los archivos están dentro de una misma carpeta raíz (ej. Render_Y/)
                   top_dirs = {
                       PurePosixPath(i.filename).parts[0]
                       for i in file_entries
@@ -63,9 +61,14 @@ jobs:
                   for info in file_entries:
                       parts = PurePosixPath(info.filename).parts
                       rel_path = Path(*parts[1:]) if strip_top else Path(*parts)
+
+                      # Evita que GitHub rechace el push por tocar .github/workflows/
+                      if rel_path.parts[:2] == (".github", "workflows"):
+                          print(f"Skipping workflow file: {rel_path}")
+                          continue
+
                       destination = (root / rel_path).resolve()
 
-                      # Prevent ZIP path-traversal entries from writing outside the repository.
                       if destination != root and root not in destination.parents:
                           raise RuntimeError(
                               f"Unsafe path in {archive.name}: {info.filename}"
