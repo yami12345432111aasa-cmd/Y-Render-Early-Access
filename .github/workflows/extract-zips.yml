@@ -1,0 +1,78 @@
+name: Extract ZIP files into repository
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**/*.zip"
+      - "*.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  extract-zips:
+    # Avoid running again on the workflow's own commit.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract ZIP files into repository root
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import shutil
+
+          root = Path.cwd().resolve()
+          zip_files = [
+              p for p in root.rglob("*.zip")
+              if ".git" not in p.parts
+          ]
+
+          if not zip_files:
+              print("No ZIP files found.")
+              raise SystemExit(0)
+
+          for archive in zip_files:
+              print(f"Extracting: {archive.relative_to(root)}")
+
+              with ZipFile(archive, "r") as zf:
+                  for info in zf.infolist():
+                      # Ignore directory entries; files are created as needed.
+                      if info.is_dir():
+                          continue
+
+                      destination = (root / info.filename).resolve()
+
+                      # Prevent ZIP path-traversal entries from writing outside the repository.
+                      if destination != root and root not in destination.parents:
+                          raise RuntimeError(
+                              f"Unsafe path in {archive.name}: {info.filename}"
+                          )
+
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      with zf.open(info) as source, destination.open("wb") as target:
+                          shutil.copyfileobj(source, target)
+
+              archive.unlink()
+              print(f"Deleted: {archive.relative_to(root)}")
+          PY
+
+      - name: Commit extracted files and remove ZIPs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Extract ZIP archives [skip ci]"
+            git push
+          fi
