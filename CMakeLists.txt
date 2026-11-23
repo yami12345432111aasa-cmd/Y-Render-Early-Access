@@ -21,6 +21,11 @@ else()
     target_compile_options(yrender_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# === DXGI para detección de GPU en Windows ===
+if(WIN32)
+    target_link_libraries(yrender_core PRIVATE dxgi)
+endif()
+
 add_executable(yrender src/main.cpp)
 target_link_libraries(yrender PRIVATE yrender_core)
 
